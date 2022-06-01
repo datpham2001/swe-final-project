@@ -77,7 +77,60 @@ def get_user(request, id):
     account = Account.objects.filter(pk=id).values('id', 'username', 'role')
     return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'detail': list(account)})
   
+def update_account(request, id):
+  if request.method == 'PUT':
+    if not Account.objects.filter(pk=id).exists():
+      return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Tài khoản không tồn tại'})
+  
+    account = Account.objects.get(pk=id)
+    body_unicode = request.body.decode('utf-8')
+    body = json.loads(body_unicode)
+    
+    # must not change role admin
+    if (account.role == 'admin' and body['role'] != 'admin'):
+      for key, value in body.items():
+        if key != 'role':
+          setattr(account, key, value)
+      account.save()
+      return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Không thể thay đổi vai trò admin'})
+    
+    # must not change role to admin if admin is exist
+    if (account.role != 'admin' and body['role'] == 'admin'):
+      # check if admin is exist
+      if Account.objects.filter(role='admin').exists():
+        for key, value in body.items():
+          if key != 'role':
+            setattr(account, key, value)
+        account.save()
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Admin đã tồn tại. Không thể có nhiều hơn 1 admin'})
+      
+    for key, value in body.items():
+      setattr(account, key, value)
+    account.save()
+    return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Cập nhật thành công'})
 
+def delete_account(request, id):
+  if request.method == 'DELETE':
+    token = request.headers.get('x-access-token')
+    ok, payload = verify_token(token)
+    
+    if ok:
+      account = Account.objects.get(pk=payload['id'])
+      if account.role != 'admin':
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không được cấp quyền thực hiện chức năng này'})
+      
+      if not Account.objects.filter(pk=id).exists():
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không tìm thấy tài khoản này'})
+        
+      del_account = Account.objects.get(pk=id)
+      del_account.delete()
+      if del_account.role == 'admin':
+        return JsonResponse(status=status.HTTP_200_OK, data={"status": status.HTTP_200_OK, 'success': True, 'message': 'Hiện tại đã xóa tài khoản admin. Vui lòng thay thế bằng tài khoản khác'})
+      
+      return JsonResponse(status=status.HTTP_200_OK, data={"status": status.HTTP_200_OK, 'success': True, 'message': 'Xóa tài khoản thành công'})  
+    
+    return payload
+  
 '''CRUD API for Season'''
 def create_season(request):
   if request.method == 'POST':
@@ -141,34 +194,30 @@ def update_season(request, id):
       body_unicode = request.body.decode('utf-8') 	
       body = json.loads(body_unicode) 	
       
-      name = body['name']
-      logo = body['logo']
-      start_date = body['start_date']
-      end_date = body['end_date']
-      max_numbers_of_teams = body['max_numbers_of_teams']
-      rank = body['rank']
-      reported_by = account
-      update = Season(name=name, logo=logo, start_date=start_date, end_date=end_date, max_numbers_of_teams=max_numbers_of_teams, rank=rank, reported_by=reported_by)
-      
-      if max_numbers_of_teams < 5:
-        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Chưa đủ điều kiện cập nhật giải đấu do số lượng đội bóng chưa đủ'})
-      
       if not Season.objects.filter(pk=id).exists():
         return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Không tìm thấy mùa giải'})
 
-      Season.objects.filter(pk=update.id).update(update)
+      if body['max_numbers_of_teams'] < 5:
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Chưa đủ điều kiện cập nhật giải đấu do số lượng đội bóng chưa đủ'})
+      
+
+      season = Season.objects.get(pk=id)
+      for key, value in body.items():
+        if key != 'id':
+          setattr(season, key, value)
+      season.save()
       data = {
         'status': status.HTTP_200_OK, 
         'success': True,
         'message': 'Cập nhật mùa giải thành công',
         'result': {
-          "name": update.name,
-          "logo": update.logo,
-          "start_date": update.start_date,
-          "end_date": update.end_date,
-          "max_numbers_of_teams": update.max_numbers_of_teams,
-          "rank": update.rank,
-          "reported_by": update.reported_by.username,
+          "name": season.name,
+          "logo": season.logo,
+          "start_date": season.start_date,
+          "end_date": season.end_date,
+          "max_numbers_of_teams": season.max_numbers_of_teams,
+          "rank": season.rank,
+          "reported_by": season.reported_by.username,
         }
       }
       
@@ -252,6 +301,49 @@ def get_team(request, id):
     team = Team.objects.filter(pk=id).values()
     return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'detail': list(team)})
   
+def update_team(request, id):
+  if request.method == 'PUT':
+    token = request.headers.get('x-access-token')
+    ok, payload = verify_token(token)
+    
+    if ok:
+      account = Account.objects.get(pk=payload['id'])
+      if account.role != 'admin':
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không được cấp quyền thực hiện chức năng này'})
+      
+      body_unicode = request.body.decode('utf-8') 	
+      body = json.loads(body_unicode)
+      
+      if not Team.objects.filter(pk=id).exists():
+        return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Không tìm thấy mùa giải'})
+
+      if body['max_numbers_of_players'] > 23:
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status":status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Số lượng đăng ký tối đa cầu thủ không được vượt quá 23 người'})
+      
+      team = Team.objects.get(pk=id)
+      for key, value in body.items():
+        if key != 'id':
+          setattr(team, key, value)
+      team.save()
+      
+      data = {
+        'status': status.HTTP_200_OK, 
+        'success': True,
+        'message': 'Cập nhật mùa giải thành công',
+        'result': {
+          "name": team.name,
+          "logo": team.logo,
+          "start_date": team.start_date,
+          "end_date": team.end_date,
+          "max_numbers_of_teams": team.max_numbers_of_teams,
+          "rank": team.rank,
+          "reported_by": team.reported_by.username,
+        }
+      }
+      
+      return JsonResponse(status=status.HTTP_200_OK, data=data)
+    
+    return payload
 '''CRUD API for player'''
 def create_player(request):
   if request.method == 'POST':
