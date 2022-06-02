@@ -18,9 +18,13 @@ urlpatterns = [
     path('teams', views.get_all_teams, name='get-all-teams'),
     path('team/<id>', views.get_team, name='get-team'),
     path('team/<id>', views.update_team, name='update-team'),
+    path('import-team', views.create_season_team, name='import-team'),
     
     path('player', views.create_player, name='create-player'),
+    path('player<id>', views.update_player, name='update-player'),
     path('players', views.get_all_players, name='get-all-players'),
     path('players/<id>', views.get_player, name='get-player'),
-    path('import-team', views.create_season_team, name='import-team')
+    
+    path('team/count_players/<id>', views.count_players_of_team, name='count-players')
+    
 ]

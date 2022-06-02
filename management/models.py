@@ -49,6 +49,7 @@ class Player(models.Model):
   weight = models.FloatField(null=True, blank=True)
   position = models.CharField(max_length=50, blank=True, null=True)
   point = models.FloatField(null=True,blank=True) #điểm đánh giá cầu thủ
+  added_by = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
   reported_by = models.ForeignKey(Account, on_delete=models.CASCADE)
   
   def __str__(self):

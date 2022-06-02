@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render
 from .models import *
 from django.http import JsonResponse
@@ -344,6 +345,7 @@ def update_team(request, id):
       return JsonResponse(status=status.HTTP_200_OK, data=data)
     
     return payload
+  
 '''CRUD API for player'''
 def create_player(request):
   if request.method == 'POST':
@@ -366,9 +368,9 @@ def create_player(request):
       weight = body['weight']
       position = body['position']
       point = body['point']
-      reported_by = account
+      added_by = Team.objects.get(pk=body['added_by'])
       
-      player = Player(name=name, image=image, age=age, gender=gender, height=height, weight=weight, position=position)
+      player = Player(name=name, image=image, age=age, gender=gender, height=height, weight=weight, position=position, point=point, added_by=added_by, reported_by=account)
       player.save()
       data = {
        'status': status.HTTP_201_CREATED,
@@ -380,7 +382,8 @@ def create_player(request):
          'gender': player.gender,
          'position': player.position,
          'point': player.point,
-         'reported_by': reported_by.username,
+         'added_by': player.added_by.id,
+         'reported_by': account.username,
        } 
       }
       
@@ -402,6 +405,51 @@ def get_player(request, id):
     team = Team.objects.filter(pk=id).values()
     return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'detail': list(team)})
 
+def update_player(request, id):
+  if request.method == 'PUT':
+    token = request.headers.get('x-access-token')
+    ok, payload = verify_token(token)
+    
+    if ok:
+      account = Account.objects.get(pk=payload['id'])
+      if account.role != 'admin':
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không được cấp quyền thực hiện chức năng này'})
+    
+      if not Player.objects.filter(pk=id).exists():
+        return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Không tìm thấy cầu thủ'})
+
+      body_unicode = request.body.decode('utf-8') 	
+      body = json.loads(body_unicode) 
+      
+      player = Player.objects.get(pk=id)
+      for key, value in body.items():
+        if key != 'id':
+          setattr(player, key, value)
+      player.save()
+      
+      data = {
+        'status': status.HTTP_200_OK,
+        'success': True,
+        'message': 'Cập nhật cầu thủ thành công', 
+        'result': {
+          "name" : player.name,
+          "image" : player.image, 
+          "age" : player.age,
+          "gender" : player.gender,
+          "height" : player.height,
+          "weight" : player.weight,
+          "position" : player.position,
+          "point" : player.point,
+          "added_by" : player.added_by.id,
+          "reported_by" : player.reported_by.username
+        }
+      }
+      
+      return JsonResponse(status=status.HTTP_200_OK, data=data)
+    
+    return payload
+
+'''API for season detail'''
 def create_season_team(request):
   if request.method == 'POST':
     token = request.headers.get('x-access-token')
@@ -431,3 +479,15 @@ def create_season_team(request):
       return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Tạo đội bóng cho mùa giải thành công'})
     
     return payload
+  
+'''API for utils'''
+def count_players_of_team(request, id):
+  if request.method == 'GET':
+    if not Team.objects.filter(pk=id).exists():
+      return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Không tìm thấy đội bóng'})
+    
+    team = Team.objects.get(pk=id)
+    player_count = Player.objects.filter(added_by=team.id).count()
+    
+    return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Query thành công', 'result': {'team': team.name, 'total_players': player_count}})
+    
