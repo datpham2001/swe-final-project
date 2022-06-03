@@ -25,6 +25,7 @@ urlpatterns = [
     path('players', views.get_all_players, name='get-all-players'),
     path('players/<id>', views.get_player, name='get-player'),
     
-    path('team/count_players/<id>', views.count_players_of_team, name='count-players')
-    
+    path('team/count_players/<id>', views.count_players_of_team, name='count-players'),
+    path('create-match', views.create_match, name='create-match'),
+    path('delete', views.delete_all)
 ]

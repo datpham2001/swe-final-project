@@ -19,3 +19,12 @@ def verify_token(token_string):
   
   return True, payload  
 
+def factorial(number):
+  res = 1
+  for i in range(1, number+1):
+    res *= i
+    
+  return res
+
+def calc_combination(n, k):
+  return factorial(n) / ((factorial(k)*factorial(n-k)))

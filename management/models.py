@@ -59,4 +59,12 @@ class Player(models.Model):
 class Season_Detail(models.Model):
   season = models.ForeignKey(Season, on_delete=models.CASCADE)
   team = models.ForeignKey(Team, on_delete=models.CASCADE)
+  total_points = models.PositiveIntegerField()
   reported_by = models.ForeignKey(Account, on_delete=models.CASCADE)
+  
+
+class Match(models.Model):
+  season = models.ForeignKey(Season, on_delete=models.CASCADE)
+  first_team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='team_1')
+  second_team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='team_2')
+  result = models.CharField(max_length=20)

@@ -330,14 +330,12 @@ def update_team(request, id):
       data = {
         'status': status.HTTP_200_OK, 
         'success': True,
-        'message': 'Cập nhật mùa giải thành công',
+        'message': 'Cập nhật đội bóng thành công',
         'result': {
           "name": team.name,
           "logo": team.logo,
-          "start_date": team.start_date,
-          "end_date": team.end_date,
-          "max_numbers_of_teams": team.max_numbers_of_teams,
-          "rank": team.rank,
+          "coach": team.coach,
+          "max_numbers_of_players": team.max_numbers_of_players,
           "reported_by": team.reported_by.username,
         }
       }
@@ -440,7 +438,7 @@ def update_player(request, id):
           "weight" : player.weight,
           "position" : player.position,
           "point" : player.point,
-          "added_by" : player.added_by.id,
+          "added_by" : player.added_by.name,
           "reported_by" : player.reported_by.username
         }
       }
@@ -457,7 +455,7 @@ def create_season_team(request):
     
     if ok:
       account = Account.objects.get(pk=payload['id'])
-      if account.role != 'team':
+      if account.role != 'admin':
         return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không được cấp quyền thực hiện chức năng này'})
       
       body_unicode = request.body.decode('utf-8') 	
@@ -473,13 +471,13 @@ def create_season_team(request):
       
       team = Team.objects.get(pk=team_id)
       season = Season.objects.get(pk=season_id)
-      season_detail = Season_Detail(season=season, team=team, reported_by=account)      
+      season_detail = Season_Detail(season=season, team=team, reported_by=account, total_points=0)      
       season_detail.save()
       
       return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Tạo đội bóng cho mùa giải thành công'})
     
     return payload
-  
+
 '''API for utils'''
 def count_players_of_team(request, id):
   if request.method == 'GET':
@@ -490,4 +488,83 @@ def count_players_of_team(request, id):
     player_count = Player.objects.filter(added_by=team.id).count()
     
     return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Query thành công', 'result': {'team': team.name, 'total_players': player_count}})
+
+'''API for create match'''
+def create_match(request):
+  if request.method == 'POST':
+    token = request.headers.get('x-access-token')
+    ok, payload = verify_token(token)
     
+    if ok:
+      account = Account.objects.get(pk=payload['id'])
+      if account.role != 'admin':
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={"status": status.HTTP_403_FORBIDDEN, "success": False, 'message': 'Không được cấp quyền thực hiện chức năng này'})
+      
+      body_unicode = request.body.decode('utf-8')
+      body = json.loads(body_unicode)
+      
+      if not Season.objects.filter(pk=body['season_id']).exists():
+        return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Mùa giải không tồn tại'})
+      
+      if not Team.objects.filter(pk=body['team_1_id']).exists() or not Team.objects.filter(pk=body['team_2_id']).exists():
+        return JsonResponse(status=status.HTTP_404_NOT_FOUND, data={'status': status.HTTP_404_NOT_FOUND, 'success': False, 'message': 'Không tìm thấy đội bóng'})
+      
+      if body['team_1_id'] == body['team_2_id']:
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Không thể tạo trấn đấu cho 1 đội bóng'})
+      # two team must not meet exceed one time
+      if Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_1_id'], second_team_id=body['team_2_id']).exists() or Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_2_id'], second_team_id=body['team_1_id']).exists():
+        return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Trận đấu đã tồn tại'})
+      
+      season = Season.objects.get(pk=body['season_id'])
+      team_1 = Team.objects.get(pk=body['team_1_id'])
+      team_2 = Team.objects.get(pk=body['team_2_id'])
+      
+      match = Match(season=season, first_team=team_1, second_team=team_2, result=body['result'])
+      match.save()
+      
+      # update point for team in the season
+      season_detail_team_1 = Season_Detail.objects.get(season=season, team=team_1)
+      season_detail_team_2 = Season_Detail.objects.get(season=season, team=team_2)
+
+      point_team_1, point_team_2 = match.result.split('-')
+      if int(point_team_1) == int(point_team_2):
+        season_detail_team_1.total_points += 1
+        season_detail_team_2.total_points += 1
+      elif int(point_team_1) > int(point_team_2):
+        season_detail_team_1.total_points += 3
+      else:
+        season_detail_team_2.total_points += 3
+        
+      season_detail_team_1.save()
+      season_detail_team_2.save()
+      
+      # update rank in the season
+      season_detail = Season_Detail.objects.filter(season_id=season.id)
+      season_team_detail = list(season_detail.values('team_id').order_by('-total_points').values('team_id'))
+      
+      rank = []
+      for value in season_team_detail:
+        team = Team.objects.get(pk=value['team_id'])
+        rank.append(team.name)
+      
+      season.rank = rank
+      season.save()
+      
+      data = {
+        'status': status.HTTP_201_CREATED,
+        'success': True,
+        'message': 'Tạo trận đấu thành công', 
+        'result': {
+          'season_id': match.season.name,
+          'team_1_id': match.first_team.name,
+          'team_2_id': match.second_team.name,
+          'result': match.result,          
+        }
+      }
+      
+      return JsonResponse(status=status.HTTP_201_CREATED, data=data)
+    return payload
+
+def delete_all(request):
+  Match.objects.all().delete()  
+  Season_Detail.objects.filter(season_id=1).update(total_points=0)
