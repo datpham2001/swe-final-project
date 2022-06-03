@@ -27,4 +27,4 @@ def factorial(number):
   return res
 
 def calc_combination(n, k):
-  return factorial(n) / ((factorial(k)*factorial(n-k)))
+  return factorial(n) // ((factorial(k)*factorial(n-k)))

@@ -511,9 +511,13 @@ def create_match(request):
       
       if body['team_1_id'] == body['team_2_id']:
         return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Không thể tạo trấn đấu cho 1 đội bóng'})
+      
       # two team must not meet exceed one time
       if Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_1_id'], second_team_id=body['team_2_id']).exists() or Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_2_id'], second_team_id=body['team_1_id']).exists():
         return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Trận đấu đã tồn tại'})
+      
+      season_detail = Season_Detail.objects.filter(season_id=season.id)
+      
       
       season = Season.objects.get(pk=body['season_id'])
       team_1 = Team.objects.get(pk=body['team_1_id'])
@@ -539,7 +543,6 @@ def create_match(request):
       season_detail_team_2.save()
       
       # update rank in the season
-      season_detail = Season_Detail.objects.filter(season_id=season.id)
       season_team_detail = list(season_detail.values('team_id').order_by('-total_points').values('team_id'))
       
       rank = []
@@ -568,3 +571,7 @@ def create_match(request):
 def delete_all(request):
   Match.objects.all().delete()  
   Season_Detail.objects.filter(season_id=1).update(total_points=0)
+  
+def home(request):
+  if request.method == 'GET':
+    return JsonResponse(status=status.HTTP_200_OK, data={'status': status.HTTP_200_OK, 'success': True, 'message': 'Server sẵn sàng lắng nghe...'})
