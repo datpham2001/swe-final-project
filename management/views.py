@@ -3,6 +3,7 @@ from django.shortcuts import render
 from .models import *
 from django.http import JsonResponse
 from django.contrib.auth.hashers import make_password, check_password
+from django.db.models import Count
 from rest_framework import status
 from django.conf import settings
 import jwt
@@ -516,9 +517,6 @@ def create_match(request):
       if Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_1_id'], second_team_id=body['team_2_id']).exists() or Match.objects.filter(season_id=body['season_id'], first_team_id=body['team_2_id'], second_team_id=body['team_1_id']).exists():
         return JsonResponse(status=status.HTTP_403_FORBIDDEN, data={'status': status.HTTP_403_FORBIDDEN, 'success': False, 'message': 'Trận đấu đã tồn tại'})
       
-      season_detail = Season_Detail.objects.filter(season_id=season.id)
-      
-      
       season = Season.objects.get(pk=body['season_id'])
       team_1 = Team.objects.get(pk=body['team_1_id'])
       team_2 = Team.objects.get(pk=body['team_2_id'])
@@ -543,6 +541,7 @@ def create_match(request):
       season_detail_team_2.save()
       
       # update rank in the season
+      season_detail = Season_Detail.objects.filter(season_id=season.id)
       season_team_detail = list(season_detail.values('team_id').order_by('-total_points').values('team_id'))
       
       rank = []
@@ -565,12 +564,20 @@ def create_match(request):
         }
       }
       
+      result = list(season_detail.values('season_id').annotate(dcount=Count('team_id')).values('dcount'))[0]['dcount']
+      if Match.objects.filter(season_id=season.id).count() == calc_combination(result, 2) :
+        data['note'] = 'Mùa giải kết thúc (đã thi đấu đủ số trận)'
+              
       return JsonResponse(status=status.HTTP_201_CREATED, data=data)
     return payload
 
 def delete_all(request):
-  Match.objects.all().delete()  
-  Season_Detail.objects.filter(season_id=1).update(total_points=0)
+  if request.method == 'DELETE':
+    body_unicode = request.body.decode('utf-8')
+    body = json.loads(body_unicode)
+    Match.objects.filter(first_team_id=body['first_team_id'], second_team_id=body['second_team_id']).delete()  
+    #Season_Detail.objects.filter(season_id=1).update(total_points=0)
+    return JsonResponse(data={'status': status.HTTP_200_OK})
   
 def home(request):
   if request.method == 'GET':
